@@ -1,3 +1,5 @@
 # BDL152BayesianSpectra
 
-testing whether I can edit
+## Environment Setup
+```conda create -n bayespectra -c rdkit numpy matplotlib tqdm rdkit scipy```
+
