@@ -1,3 +1,5 @@
 # BDL152BayesianSpectra
 
-testing whether I can edit
+## Environment Setup
+```conda create -n bayespectra -c conda-forge numpy matplotlib tqdm rdkit=2022 scipy ipykernel```
+
