@@ -25,7 +25,7 @@ class Vanilla_FFN(pl.LightningModule):
             nn.Linear(4096, 4096), nn.ReLU(),
             nn.Linear(4096, 4096), nn.ReLU(),
             nn.Linear(4096, 4096), nn.ReLU(),
-            nn.Linear(4096, OUTPUT_SIZE), nn.ReLU()
+            nn.Linear(4096, OUTPUT_SIZE), nn.Softmax()
 
                                     )
     def forward(self, x):
@@ -52,7 +52,7 @@ class Vanilla_FFN(pl.LightningModule):
         loss = self.get_loss(y_hat, y)
         
         self.log("test_loss", loss)
-        self.log("test_cosine_sim", F.cosine_similarity(y_hat, y).mean(), prog_bar=True)
+        self.log("test_argmax", y_hat[np.argmax(y)], prog_bar=True)
 
         return loss
 

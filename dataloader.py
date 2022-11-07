@@ -37,11 +37,8 @@ class MoNADataset(Dataset):
 
         """
         self.msms = [np.array(i) for i in self.msms]
-        """self.msms = [i/np.max(i) for i in self.msms]
-        thr = 0.00
-        for i in range(len(self)):
-            self.msms[i][self.msms[i] < thr] = 0;
-        """ 
+        self.msms = [i == np.max(i) for i in self.msms]
+        assert max([i.sum() for i in self.msms]) == 1, 'Error: dual peak';
         self.msms = [torch.Tensor(i) for i in self.msms]
 
         nonzero_weight = 0.9 ; zero_weight = 0.1;
