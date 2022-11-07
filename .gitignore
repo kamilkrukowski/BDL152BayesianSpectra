@@ -134,3 +134,6 @@ dmypy.json
 ./Data/*
 ./figs/*
 ./lightning_logs/*
+./Data
+./figs
+./lightning_logs

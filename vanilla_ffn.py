@@ -63,16 +63,16 @@ class Vanilla_FFN(pl.LightningModule):
         return optimizer
 
 
-TRAIN_BATCH_SIZE = 8192
+TRAIN_BATCH_SIZE = 1024
 
 model = Vanilla_FFN()
 
 dataset = MoNADataset()
-train_set, test_set, extra = utils.data.random_split(dataset, [0.2, 0.05, 0.75], generator=Generator().manual_seed(2022))
+train_set, test_set, extra = utils.data.random_split(dataset, [0.8, 0.2, 0.0], generator=Generator().manual_seed(2022))
 
 train_loader = utils.data.DataLoader(train_set, num_workers=12, batch_size=TRAIN_BATCH_SIZE) 
 test_loader = utils.data.DataLoader(test_set, batch_size=len(test_set)) 
 
-trainer = pl.Trainer(max_epochs=5, auto_select_gpus = True, auto_scale_batch_size=True)
+trainer = pl.Trainer(max_epochs=50, auto_select_gpus = True, auto_scale_batch_size=True)
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=test_loader)
 
