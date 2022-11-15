@@ -1,5 +1,7 @@
 # Custom additions
-/data/*
+trials/*
+figs/*
+Data/*
 
 
 # Byte-compiled / optimized / DLL files
