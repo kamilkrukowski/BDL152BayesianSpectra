@@ -1,5 +1,7 @@
 # Custom additions
-/data/*
+trials/*
+figs/*
+Data/*
 
 
 # Byte-compiled / optimized / DLL files
@@ -131,3 +133,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+./Data/*
+./figs/*
+./lightning_logs/*
+./Data
+./figs
+./lightning_logs

@@ -37,12 +37,25 @@ class MoNADataset(Dataset):
 
         """
         self.msms = [np.array(i) for i in self.msms]
-        self.msms = [i/np.max(i) for i in self.msms]
+        """self.msms = [i/np.max(i) for i in self.msms]
         thr = 0.00
         for i in range(len(self)):
             self.msms[i][self.msms[i] < thr] = 0;
-            
+        """ 
         self.msms = [torch.Tensor(i) for i in self.msms]
+
+        nonzero_weight = 0.9 ; zero_weight = 0.1;
+
+        self.masks = []
+        for i in range(len(self)):
+            nonzero_mask = self.msms[i] != 0
+            zero_mask = ~nonzero_mask
+
+            nonzero_mask = nonzero_mask / (nonzero_weight * nonzero_mask.sum());
+            zero_mask = zero_mask / (zero_weight * zero_mask.sum());
+            
+            mask = zero_mask + nonzero_mask
+            self.masks.append(mask)
 
     def __len__(self):
         return self._len
@@ -50,7 +63,8 @@ class MoNADataset(Dataset):
     def __getitem__(self, idx):
         x = self.fps[idx]
         y = self.msms[idx]
-        return (x, y)
+        mask = self.masks[idx]
+        return (x, y, mask)
 
 
 if __name__ == '__main__':
