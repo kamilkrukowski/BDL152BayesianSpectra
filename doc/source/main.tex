@@ -35,6 +35,8 @@
 \usepackage{amssymb}
 \usepackage{float}
 \usepackage{graphicx} 
+\usepackage{stmaryrd}       % double square brackets |[ ]|
+\usepackage{amsmath}        % \underset for argmax
 
 
 \title{CS 152 Project: Checkpoint 1}
@@ -127,6 +129,7 @@ By Mon 11/21
 In-silico mass spectra are frequently used as references to help annotate experimentally produced spectra, yet the uncertainty of spectra predictions is rarely reported. We aim to approximate a molecule’s mass spectrum by predicting the bin location of its highest-intensity peak given its fingerprint while reporting the uncertainty of the model. Having uncertainty estimates should aid in the process of matching experimentally produced and synthetic spectra. We model this as a multiclass classification task with a training set of observations: $\{x_{1:N}, y_{1:N}\}$ where each input  is a molecular fingerprint of size 166 and each output $y_n$ is a one-hot encoding of size 1,000. We develop a vanilla feed-forward neural network and several BBB models with multivariate Gaussian posterior approximations of varying flexibility. We expect our dataset features to have high covariance, suggesting that perhaps the hidden layers should also have similarly high covariance. For this reason, we expect posterior approximations with fixed variance and independent weight variances to perform worse than the non-Bayesian neural network. However, we expect the posterior approximation with per-layer weight covariance to capture these dependencies and outperform the vanilla neural network
 
 \section{Methods}
+\subsection{Model Objectives}
 Our probabilistic model consists of random variables $\theta$ for weights and biases of the feed-forward neural network, $f(x, \theta)$ and $y$ for the outputs of prediction. We assume a Gaussian distribution over $\theta$ as its prior (1). Specifically, we plan to use a normal prior with $\mu = 0$ and $\Sigma = I$. The likelihood is a categorical distribution with parameters $\pi_1,. . .  , \pi_K$ computed from the feed-forward neural network (2). We describe the model posterior in (3).
 \begin{equation}
     p(\theta) = \mathcal{N}(\mu, \Sigma)
@@ -154,6 +157,37 @@ In addition to Gaussian mean-field VI with independent weights and biases, we pl
 \begin{equation}
     q(\theta; m,s) = \prod_{l=1}^L \mathcal{N}(\theta^l| m^l, \Sigma^l)
 \end{equation}
+
+\subsection{Calibration}
+Our model derives a posterior predictive over our prediction.
+\begin{equation}
+    p(y|x) = \int p(y|x,\theta)p(\theta|x)d\theta
+\end{equation}
+This allows us to derive a confidence interval for our prediction with a lower and upper bound $\hat{y}_l, \hat{y}_u$. We define this in terms of a confidence function that takes in a parameter $p$ referring to the interval width.
+\begin{equation}
+    (\hat{y}_l, \hat{y}_u) = \textrm{C}(x, p)
+\end{equation}
+Where we expect
+\begin{equation}
+    P[\hat{y} \in (\hat{y}_l, \hat{y}_u)] = p
+\end{equation}
+We apply a post-training affine correction to the uncertainty of our model. We call this correction $T$.\newline
+\begin{equation}
+    (m_1\hat{y}_l + b_1, m_2\hat{y}_u + b_2) = T(x,p)
+\end{equation}
+We learn $m_1, m_2, b_1, b_2$ through the following objective using gradient descent. We expect our predicted interval corresponding to $p$ to correctly capture $p$ of the data. Let $L(p)$ represent our "L1 Calibration Loss".
+\begin{equation}
+    L(p) = p - \mathbb{E}\llbracket \hat{y} \in T(x, p)\rrbracket
+\end{equation}
+We square our loss to derive a "Mean Square Error" or "L-2" training objective, and integrate across all interval widths.
+\begin{equation}
+    \underset{m, b}{\arg\min}\int ||L(p)||^2dp
+\end{equation}
+For the sake of computation, the expectation in our loss and the integral are both intractible -- We will approximate both using Monte-Carlo methods over the validation set $V$ of samples and a set $S$ of uniformly distribution $p$ values.\newline
+\begin{equation}
+    \underset{m, b}{\arg\min}\frac{1}{|S|}\sum_{p \in S}[p-\frac{1}{|V|}\sum_{v\in V}\hat{y_v} \in T(x_v, p)]^2
+\end{equation}
+
 
 \section{Experiments}
 \subsection{Dataset}
