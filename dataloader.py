@@ -1,14 +1,3 @@
-from torch.utils.data import Dataset
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.stats import binned_statistic
-from tqdm.auto import tqdm
-from rdkit import Chem
-from rdkit.Chem import MolFromSmiles
-from rdkit.Chem import MACCSkeys
-
-
 import re
 import pickle as pkl
 import os
@@ -16,6 +5,17 @@ import json
 import contextlib
 from io import StringIO
 import warnings
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from torch.utils.data import Dataset
+from scipy.stats import binned_statistic
+from tqdm.auto import tqdm
+from rdkit import Chem
+from rdkit.Chem import MolFromSmiles
+from rdkit.Chem import MACCSkeys
+from rdkit.Chem.AllChem import GetMorganFingerprintAsBitVect
 
 
 def process_msms(msms: str):
@@ -43,14 +43,20 @@ def bin_msms(mz_array, intensity_array, mass_range=[0,1000], bin_width=1):
     return msms_vec
 
 
-def generate_fingerprint(smiles, type='MACCS'):
+def generate_fingerprint(smiles, type='ECFP'):
     mol = MolFromSmiles(smiles)
-    if type.lower() == 'maccs':
+
+    fingerprint = None
+    if type.upper() == 'MACCS':
         fingerprint = MACCSkeys.GenMACCSKeys(mol)
+    # By default, ecfp-4 aka diameter 4 or radius 2
+    if type.upper() == 'ECFP':
+        fingerprint = GetMorganFingerprintAsBitVect(mol, 2, nBits=512)
 
     return fingerprint.ToList()
 
-def preprocess_data(data_dir, type='MACCS'):
+def preprocess_data(data_dir, type='ECFP'):
+    
     data = None
     with open(os.path.join(data_dir, 'MoNA-export-LC-MS-MS_Spectra.json')) as f:
         data = json.load(f)
@@ -62,7 +68,10 @@ def preprocess_data(data_dir, type='MACCS'):
     failed_fps = []
     error_msgs = StringIO()
 
-    for i, x in enumerate(tqdm(data, desc='MACCS fingerprinting')):
+
+    for idx in tqdm(reversed(range(len(data))), desc=f'{type} fingerprinting', total=len(data)):
+
+        x = data[idx]
 
         msms = x['spectrum']
         mz_array, intensity_array = process_msms(msms)
@@ -83,23 +92,24 @@ def preprocess_data(data_dir, type='MACCS'):
                         break
                 fp = generate_fingerprint(smiles, type=type)
             except:
-                print('here;')
-                failed_fps.append(i)
+                failed_fps.append(idx)
                 continue
 
         all_msms.append(msms_vec)
         all_fps.append(fp)
+        
+        del data[idx] # Reduces memory consumption, as it rises with the creation of fingerprint objects
 
     print("Number of msms and fps processed: ", len(all_fps))
     print("Number of failed instances: ", len(failed_fps))
     error_msgs = error_msgs.getvalue();
 
     all_fps = np.array(all_fps)
-    with open(os.path.join(data_dir, "msms_maccs.pkl"), 'wb') as f:
+    with open(os.path.join(data_dir, f"msms_{type.lower()}.pkl"), 'wb') as f:
         pkl.dump(all_msms, f)
-    with open(os.path.join(data_dir, "fps_maccs.pkl"), 'wb') as f:
+    with open(os.path.join(data_dir, f"fps_{type.lower()}.pkl"), 'wb') as f:
         pkl.dump(all_fps, f)
-    with open(os.path.join(data_dir, "errors_maccs.pkl"), 'wb') as f:
+    with open(os.path.join(data_dir, f"errors_{type.lower()}.pkl"), 'wb') as f:
         pkl.dump(error_msgs, f)
 
 
@@ -107,15 +117,19 @@ def preprocess_data(data_dir, type='MACCS'):
     Constructor: (data_dir, fingerprint filename, mass spec file name)
 """
 class MoNADataset(Dataset):
-    def __init__(self, data_dir = './data', fps_name = 'fps_maccs', ms_name='msms_maccs'):
+    def __init__(self, data_dir = './data', fingerprint_type='ECFP', force=False):
         super(Dataset).__init__()
+        
+        
+        assert fingerprint_type in ['MACCS', 'ECFP'], 'Invalid Fingerprint Type';
+        fps_name = f'fps_{fingerprint_type.lower()}'; ms_name=f'msms_{fingerprint_type.lower()}';
 
         if '.pkl' not in fps_name:
             fps_name = fps_name + '.pkl'
         if '.pkl' not in ms_name:
             ms_name = ms_name + '.pkl'
 
-        if not os.path.exists(os.path.join(data_dir, fps_name)) or not os.path.exists(os.path.join(data_dir, ms_name)):
+        if force or not os.path.exists(os.path.join(data_dir, fps_name)) or not os.path.exists(os.path.join(data_dir, ms_name)):
 
             print("Generating Fingerprints...")
             if not os.path.exists(os.path.join(data_dir, 'MoNA-export-LC-MS-MS_Spectra.json')):
@@ -127,9 +141,7 @@ class MoNADataset(Dataset):
                 os.system(f"mv MoNA-export-LC-MS-MS_Spectra.json {data_dir}")
                 os.system(f"rm 9c822c48-67f4-4600-8b81-ef7491008245")
 
-            # Match maccs key in filename
-            if re.match('.*maccs', fps_name):
-                preprocess_data(data_dir, type='MACCS')
+            preprocess_data(data_dir, type=fingerprint_type)
 
 
         self.fps = None
@@ -185,9 +197,9 @@ class MoNADataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = MoNADataset();
+    dataset = MoNADataset(force=True);
 
-    for x, y in dataset:
+    for x, y, *r in dataset:
         print(f"training data shape is {x.shape}")
         print(f"Mass spec label shape is {y.shape}")
         break;
