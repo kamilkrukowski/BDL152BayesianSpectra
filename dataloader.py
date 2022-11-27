@@ -9,6 +9,7 @@ import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 from torch.utils.data import Dataset
 from scipy.stats import binned_statistic
 from tqdm.auto import tqdm
