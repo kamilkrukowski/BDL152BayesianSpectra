@@ -45,8 +45,8 @@ class BayesianLinear(nn.Module):
     self.weight = Gaussian(self.weight_mu, self.weight_rho)
 
     # Bias parameters
-    self.bias_mu = nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-0.2, 0.2))
-    self.bias_rho = nn.Parameter(torch.randn((out_features, in_features)))
+    self.bias_mu = nn.Parameter(torch.Tensor(out_features).uniform_(-0.2, 0.2))
+    self.bias_rho = nn.Parameter(torch.randn((out_features)))
     self.bias = Gaussian(self.bias_mu, self.bias_rho)
 
     # Prior distribution
@@ -107,16 +107,16 @@ class BayesianNetwork(pl.LightningModule):
     
     def log_prior_and_posterior(self):
         log_prior = 0
-        log_posterior = 0
+        log_variational_posterior = 0
         for layer in self.layers:
            log_prior += layer.log_prior
-           log_posterior += layer.log_posterior
-        return log_prior, log_posterior
+           log_variational_posterior += layer.log_variational_posterior
+        return log_prior, log_variational_posterior
 
     def backward(self, loss, optimizer, optimizer_idx):
         loss.backward(retain_graph=True)
 
-    def sample_elbo(self, input, target, batch):
+    def sample_elbo(self, input, target):
         samples = self.samples
         outputs = torch.zeros(samples, len(input), self.output_size)
         log_priors = torch.zeros(samples)
@@ -133,7 +133,7 @@ class BayesianNetwork(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y, _ = batch
 
-        loss = self.sample_elbo(x, y, batch)
+        loss = self.sample_elbo(x, y)
         
         self.log("train_loss", loss)
         return loss
@@ -141,7 +141,7 @@ class BayesianNetwork(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y, _ = batch
         # y_hat = self.forward(x)
-        loss = self.sample_elbo(x, y, batch)
+        loss = self.sample_elbo(x, y)
     
         self.log("test_loss", loss)
         #self.log("test_argmax", y_hat[np.argmax(y)], prog_bar=True)
