@@ -17,9 +17,10 @@ from scipy.stats import binned_statistic
 from tqdm.auto import tqdm
 
 from rdkit import Chem
+from rdkit import RDLogger
 from rdkit.Chem import MolFromSmiles
 from rdkit.Chem import MACCSkeys
-from rdkit.Chem.AllChem import GetMorganFingerprintAsBitVect
+from rdkit.Chem.AllChem import GetMorganFingerprintAsBitVect, GetMorganFingerprint
 
 
 def process_msms(msms: str):
@@ -55,7 +56,7 @@ def generate_fingerprint(smiles, type='ECFP'):
         fingerprint = MACCSkeys.GenMACCSKeys(mol)
     # By default, ecfp-4 aka diameter 4 or radius 2
     elif type.upper() == 'ECFP':
-        fingerprint = GetMorganFingerprintAsBitVect(mol, 2, nBits=512)
+        fingerprint = GetMorganFingerprint(mol, 2)
     elif type.upper() == 'SMILES':
         fingerprint = smiles
 
@@ -74,6 +75,7 @@ def preprocess_data(data_dir, type='ECFP'):
     failed_fps = []
     error_msgs = StringIO()
 
+    RDLogger.DisableLog('rdApp.*')     
 
     for idx in tqdm(reversed(range(len(data))), desc=f'{type} fingerprinting', total=len(data)):
 
@@ -89,23 +91,22 @@ def preprocess_data(data_dir, type='ECFP'):
         msms_vec = bin_msms(mz_array, intensity_array)
 
         # Hide Rdkit error messages4
-        with contextlib.redirect_stderr(error_msgs):
-            
-            try:
-                for mD in x['compound'][0]['metaData']:
-                    if mD['name'] == 'SMILES':
-                        smiles = mD['value']
-                        break
-                fp = generate_fingerprint(smiles, type=type)
-            except:
-                failed_fps.append(idx)
-                continue
+        try:
+            for mD in x['compound'][0]['metaData']:
+                if mD['name'] == 'SMILES':
+                    smiles = mD['value']
+                    break
+            fp = generate_fingerprint(smiles, type=type)
+        except:
+            failed_fps.append(idx)
+            continue
 
         all_msms.append(msms_vec)
         all_fps.append(fp)
         
         del data[idx] # Reduces memory consumption, as it rises with the creation of fingerprint objects
 
+    RDLogger.EnableLog('rdApp.*')     
     print("Number of msms and fps processed: ", len(all_fps))
     print("Number of failed instances: ", len(failed_fps))
     error_msgs = error_msgs.getvalue();
@@ -207,7 +208,7 @@ class MoNADataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = MoNADataset(force=True);
+    dataset = MoNADataset(fingerprint_type='ECFP', force=True);
 
     for x, y, *r in dataset:
         print(f"training data shape is {x.shape}")
