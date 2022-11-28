@@ -14,6 +14,67 @@ import sklearn.metrics
 
 from dataloader import MoNADataset
 
+class BinGaussian(object):
+    def __init__(self, mu, rho, bin_size=10):
+        super().__init__()
+        n_samples = len(mu);
+        self.mu = F.pad(mu, bin_size-n_samples%bin_size ,value=0)
+        self.rho = F.pad(rho, bin_size-n_samples%bin_size ,value=0)
+        self.bins_mu = mu.reshape(-1,bin_size)
+        self.bins_rho = rho.reshape(-1, bin_size**2)
+    
+    @property
+    def sigma(self):
+        return torch.log1p(torch.exp(torch.as_tensor(self.rho)))
+    
+    def sample(self):
+        epsilon = self.normal.sample(self.rho.size())
+        return self.mu + self.sigma * epsilon
+    
+    def log_prob(self, input):
+        return (-math.log(math.sqrt(2 * math.pi))
+                - torch.log(self.sigma)
+                - ((input - self.mu) ** 2) / (2 * self.sigma ** 2)).sum()
+
+class BayesianBinLinear(nn.Module):
+    def __init__(self, in_features, out_features, q_sigma=0.2):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+
+        # Weight parameters
+        self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-0.2, 0.2))
+        self.weight_rho = nn.Parameter(torch.randn((out_features*(bin_size**2), in_features*(bin_size**2))))
+        self.weight = Gaussian(self.weight_mu, self.weight_rho)
+
+        # Bias parameters
+        self.bias_mu = nn.Parameter(torch.Tensor(out_features).uniform_(-0.2, 0.2))
+        self.bias_rho = nn.Parameter(torch.randn((out_features*(bin_size**2))))
+        self.bias = Gaussian(self.bias_mu, self.bias_rho)
+
+        # Prior distribution
+        self.weight_prior = Gaussian(0, q_sigma)
+        self.bias_prior = Gaussian(0, q_sigma)
+        self.log_prior = 0
+        self.log_variational_posterior = 0
+
+    def forward(self, input, sample=False):
+        if self.training or sample:
+            weight = self.weight.sample()
+            bias = self.bias.sample()
+        else:
+            weight = self.weight.mu
+            bias = self.bias.mu
+
+        if self.training:
+            self.log_prior = self.weight_prior.log_prob(weight) + self.bias_prior.log_prob(bias)
+            self.log_variational_posterior = self.weight.log_prob(weight) + self.bias.log_prob(bias)
+        else:
+            self.log_prior, self.log_variational_posterior = 0,0
+
+        output = F.linear(input, weight, bias)
+        return output
+
 class Gaussian(object):
     def __init__(self, mu, rho):
         super().__init__()
