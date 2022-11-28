@@ -75,7 +75,6 @@ class BayesianLinear(nn.Module):
 class BayesianNetwork(pl.LightningModule):
     def __init__(self, 
                  lr,
-                 num_batches,
                  input_size, 
                  output_size=1000, 
                  q_sigma=0.2,
@@ -83,7 +82,6 @@ class BayesianNetwork(pl.LightningModule):
                  samples=2):
       super().__init__()
       self.lr = lr
-      self.num_batches = num_batches
       self.samples = samples
       self.output_size = output_size
       self.input_size = input_size
@@ -113,9 +111,6 @@ class BayesianNetwork(pl.LightningModule):
            log_variational_posterior += layer.log_variational_posterior
         return log_prior, log_variational_posterior
 
-    def backward(self, loss, optimizer, optimizer_idx):
-        loss.backward(retain_graph=True)
-
     def sample_elbo(self, input, target):
         samples = self.samples
         outputs = torch.zeros(samples, len(input), self.output_size)
@@ -126,25 +121,29 @@ class BayesianNetwork(pl.LightningModule):
             log_priors[i], log_variational_posteriors[i] = self.log_prior_and_posterior()
         log_prior = log_priors.mean()
         log_variational_posterior = log_variational_posteriors.mean()
-        negative_log_likelihood = F.nll_loss(outputs.mean(0), torch.argmax(target, dim=1), size_average=False)
-        loss = (log_variational_posterior - log_prior)/self.num_batches + negative_log_likelihood
+        negative_log_likelihood = F.nll_loss(outputs.mean(0), torch.argmax(target, dim=1), reduction='sum')
+        loss = (log_variational_posterior - log_prior) + negative_log_likelihood
         return loss
 
     def training_step(self, batch, batch_idx):
-        x, y, _ = batch
+        x, y, *_ = batch
 
         loss = self.sample_elbo(x, y)
+        
+        y_hat = self.forward(x, sample=False)
         
         self.log("train_loss", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y, _ = batch
-        # y_hat = self.forward(x)
+        x, y, *_ = batch
         loss = self.sample_elbo(x, y)
+        
+        y_hat = self.forward(x, sample=False)
     
-        self.log("test_loss", loss)
-        #self.log("test_argmax", y_hat[np.argmax(y)], prog_bar=True)
+        self.log("val_loss", loss)
+        self.log("val_cosine_sim", F.cosine_similarity(y_hat, y).mean(), prog_bar=True, on_epoch=True)
+        self.log("val_argmax", y_hat[np.argmax(y)], prog_bar=True)
 
         return loss
 
@@ -165,7 +164,7 @@ if __name__ == '__main__':
     train_loader = utils.data.DataLoader(train_set, num_workers=num_workers, batch_size=TRAIN_BATCH_SIZE) 
     test_loader = utils.data.DataLoader(test_set, batch_size=TEST_BATCH_SIZE) 
 
-    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[10], input_size=len(train_set[0][0]), num_batches=len(train_loader))
+    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]))
 
     trainer = pl.Trainer(max_epochs=10, auto_select_gpus = True, auto_scale_batch_size=True)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=test_loader)

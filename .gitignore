@@ -1,8 +1,11 @@
+
+
 # Custom additions
 trials/*
 figs/*
 data/*
 Data/*
+lightning_logs/*
 
 
 # Byte-compiled / optimized / DLL files
