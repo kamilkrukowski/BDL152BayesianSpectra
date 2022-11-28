@@ -20,8 +20,9 @@ from rdkit import Chem
 from rdkit import RDLogger
 from rdkit.Chem import MolFromSmiles
 from rdkit.Chem import MACCSkeys
-from rdkit.Chem.AllChem import GetMorganFingerprintAsBitVect, GetMorganFingerprint
+from rdkit.Chem.AllChem import GetMorganFingerprintAsBitVect
 
+N_MORGAN_BITS=1024
 
 def process_msms(msms: str):
 
@@ -56,7 +57,7 @@ def generate_fingerprint(smiles, type='ECFP'):
         fingerprint = MACCSkeys.GenMACCSKeys(mol)
     # By default, ecfp-4 aka diameter 4 or radius 2
     elif type.upper() == 'ECFP':
-        fingerprint = GetMorganFingerprint(mol, 2)
+        fingerprint = GetMorganFingerprintAsBitVect(mol, 2, nBits=N_MORGAN_BITS)
     elif type.upper() == 'SMILES':
         fingerprint = smiles
 

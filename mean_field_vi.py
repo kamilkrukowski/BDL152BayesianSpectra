@@ -14,6 +14,7 @@ import sklearn.metrics
 
 from dataloader import MoNADataset
 
+
 class Gaussian(object):
     def __init__(self, mu, rho):
         super().__init__()
@@ -33,6 +34,7 @@ class Gaussian(object):
         return (-math.log(math.sqrt(2 * math.pi))
                 - torch.log(self.sigma)
                 - ((input - self.mu) ** 2) / (2 * self.sigma ** 2)).sum()
+    
      
 class BayesianLinear(nn.Module):
     def __init__(self, in_features, out_features, q_sigma=0.2):
@@ -130,7 +132,6 @@ class BayesianNetwork(pl.LightningModule):
         x, y, *_ = batch
 
         loss = self.sample_elbo(x, y) 
-        y_hat = self.forward(x, sample=False)
         
         self.log("train_loss", loss)
         return loss
@@ -145,7 +146,7 @@ class BayesianNetwork(pl.LightningModule):
         # Mean AUROC of top-1 peak vs all other peaks across molecules
         self.log(f"{log_name}_mAUROC", np.mean([sklearn.metrics.roc_auc_score(F.one_hot(np.argmax(y[i]), self.output_size).reshape(-1,1), y_hat[i]) for i in range(len(y))]), prog_bar=True)
         # Mean top-1 peak Rank across molecules
-        self.log(f"{log_name}_peak_rank", np.mean([float(i) for i in np.argmax(y_hat, axis=1)]), prog_bar=True)
+        self.log(f"{log_name}_peak_rank", np.argmax(y_hat.numpy(), axis=1).astype(float).mean(), prog_bar=True)
 
     def validation_step(self, batch, batch_idx):
         x, y, *_ = batch
@@ -154,6 +155,8 @@ class BayesianNetwork(pl.LightningModule):
         self.log("val_loss", loss)
 
         self.get_metrics(batch, 'val')        
+
+        self.log('val_some_mu', self.layers[0].weight_mu[0][0], prog_bar=True)
 
         return loss
 
@@ -166,15 +169,27 @@ class BayesianNetwork(pl.LightningModule):
 if __name__ == '__main__':
     TRAIN_BATCH_SIZE = 1024
     TEST_BATCH_SIZE = 1024
+    EPOCHS = 50
 
-    dataset = MoNADataset()
-    train_set, test_set, extra = utils.data.random_split(dataset, [int(0.8 * len(dataset)), len(dataset) - int(0.8 * len(dataset)), 0], generator=Generator().manual_seed(2022))
+    dataset = MoNADataset(fingerprint_type='MACCS')
+    
+    train_set, test_set, extra = utils.data.random_split(dataset, [0.8, 0.2, 0], generator=Generator().manual_seed(2022))
+    
+    print(f"INPUT_SIZE: {len(train_set[0][0])}")
 
     num_workers = multiprocessing.cpu_count()
     train_loader = utils.data.DataLoader(train_set, num_workers=num_workers, batch_size=TRAIN_BATCH_SIZE) 
     test_loader = utils.data.DataLoader(test_set, num_workers=num_workers, batch_size=TEST_BATCH_SIZE) 
 
-    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]), output_size=1000, samples=8)
+    metric = 'val_mAUROC'
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        './lightning_logs', monitor=metric, mode='max'
+    )
+    callbacks=[checkpoint_callback, pl.callbacks.ModelSummary(max_depth=-1), 
+               pl.callbacks.EarlyStopping(monitor=metric, mode="max", patience=5, min_delta=0.001)]
 
-    trainer = pl.Trainer(max_epochs=10, auto_select_gpus = True, auto_scale_batch_size=True)
+    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[1024], input_size=len(train_set[0][0]), output_size=1000, samples=8)
+
+    trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True,
+                            callbacks=callbacks)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=test_loader)
