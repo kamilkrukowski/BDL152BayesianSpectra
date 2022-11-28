@@ -143,7 +143,7 @@ class BayesianNetwork(pl.LightningModule):
     
         self.log("val_loss", loss)
         self.log("val_cosine_sim", F.cosine_similarity(y_hat, y).mean(), prog_bar=True, on_epoch=True)
-        self.log("val_argmax", y_hat[np.argmax(y)], prog_bar=True)
+        #self.log("val_argmax", y_hat[np.argmax(y, axis=1)].mean(), prog_bar=True)
 
         return loss
 
@@ -162,7 +162,7 @@ if __name__ == '__main__':
 
     num_workers = multiprocessing.cpu_count()
     train_loader = utils.data.DataLoader(train_set, num_workers=num_workers, batch_size=TRAIN_BATCH_SIZE) 
-    test_loader = utils.data.DataLoader(test_set, batch_size=TEST_BATCH_SIZE) 
+    test_loader = utils.data.DataLoader(test_set, num_workers=num_workers, batch_size=TEST_BATCH_SIZE) 
 
     model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]))
 
