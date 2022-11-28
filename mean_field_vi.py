@@ -34,51 +34,51 @@ class Gaussian(object):
                 - ((input - self.mu) ** 2) / (2 * self.sigma ** 2)).sum()
      
 class BayesianLinear(nn.Module):
-  def __init__(self, in_features, out_features, q_sigma=0.2):
-    super().__init__()
-    self.in_features = in_features
-    self.out_features = out_features
+    def __init__(self, in_features, out_features, q_sigma=0.2):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
 
-    # Weight parameters
-    self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-0.2, 0.2))
-    self.weight_rho = nn.Parameter(torch.randn((out_features, in_features)))
-    self.weight = Gaussian(self.weight_mu, self.weight_rho)
+        # Weight parameters
+        self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-0.2, 0.2))
+        self.weight_rho = nn.Parameter(torch.randn((out_features, in_features)))
+        self.weight = Gaussian(self.weight_mu, self.weight_rho)
 
-    # Bias parameters
-    self.bias_mu = nn.Parameter(torch.Tensor(out_features).uniform_(-0.2, 0.2))
-    self.bias_rho = nn.Parameter(torch.randn((out_features)))
-    self.bias = Gaussian(self.bias_mu, self.bias_rho)
+        # Bias parameters
+        self.bias_mu = nn.Parameter(torch.Tensor(out_features).uniform_(-0.2, 0.2))
+        self.bias_rho = nn.Parameter(torch.randn((out_features)))
+        self.bias = Gaussian(self.bias_mu, self.bias_rho)
 
-    # Prior distribution
-    self.weight_prior = Gaussian(0, q_sigma)
-    self.bias_prior = Gaussian(0, q_sigma)
-    self.log_prior = 0
-    self.log_variational_posterior = 0
+        # Prior distribution
+        self.weight_prior = Gaussian(0, q_sigma)
+        self.bias_prior = Gaussian(0, q_sigma)
+        self.log_prior = 0
+        self.log_variational_posterior = 0
 
-  def forward(self, input, sample=False):
-    if self.training or sample:
-      weight = self.weight.sample()
-      bias = self.bias.sample()
-    else:
-      weight = self.weight.mu
-      bias = self.bias.mu
+    def forward(self, input, sample=False):
+        if self.training or sample:
+            weight = self.weight.sample()
+            bias = self.bias.sample()
+        else:
+            weight = self.weight.mu
+            bias = self.bias.mu
 
-    if self.training:
-      self.log_prior = self.weight_prior.log_prob(weight) + self.bias_prior.log_prob(bias)
-      self.log_variational_posterior = self.weight.log_prob(weight) + self.bias.log_prob(bias)
-    else:
-      self.log_prior, self.log_variational_posterior = 0,0
+        if self.training:
+            self.log_prior = self.weight_prior.log_prob(weight) + self.bias_prior.log_prob(bias)
+            self.log_variational_posterior = self.weight.log_prob(weight) + self.bias.log_prob(bias)
+        else:
+            self.log_prior, self.log_variational_posterior = 0,0
 
-    output = F.linear(input, weight, bias)
-    return output
+        output = F.linear(input, weight, bias)
+        return output
        
 class BayesianNetwork(pl.LightningModule):
     def __init__(self, 
                  lr,
                  input_size, 
-                 output_size=1000, 
+                 output_size, 
                  q_sigma=0.2,
-                 hidden_layer_sizes=[4096,4096],
+                 hidden_layer_sizes=[10],
                  samples=2):
       super().__init__()
       self.lr = lr
@@ -164,7 +164,7 @@ if __name__ == '__main__':
     train_loader = utils.data.DataLoader(train_set, num_workers=num_workers, batch_size=TRAIN_BATCH_SIZE) 
     test_loader = utils.data.DataLoader(test_set, num_workers=num_workers, batch_size=TEST_BATCH_SIZE) 
 
-    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]))
+    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]), output_size=1000, samples=8)
 
     trainer = pl.Trainer(max_epochs=10, auto_select_gpus = True, auto_scale_batch_size=True)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=test_loader)
