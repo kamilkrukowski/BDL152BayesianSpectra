@@ -9,10 +9,13 @@ import warnings
 
 import numpy as np
 import matplotlib.pyplot as plt
+
 import torch
 from torch.utils.data import Dataset
+
 from scipy.stats import binned_statistic
 from tqdm.auto import tqdm
+
 from rdkit import Chem
 from rdkit.Chem import MolFromSmiles
 from rdkit.Chem import MACCSkeys
@@ -51,8 +54,10 @@ def generate_fingerprint(smiles, type='ECFP'):
     if type.upper() == 'MACCS':
         fingerprint = MACCSkeys.GenMACCSKeys(mol)
     # By default, ecfp-4 aka diameter 4 or radius 2
-    if type.upper() == 'ECFP':
+    elif type.upper() == 'ECFP':
         fingerprint = GetMorganFingerprintAsBitVect(mol, 2, nBits=512)
+    elif type.upper() == 'SMILES':
+        fingerprint = smiles
 
     return fingerprint.ToList()
 
@@ -114,15 +119,20 @@ def preprocess_data(data_dir, type='ECFP'):
         pkl.dump(error_msgs, f)
 
 
-"""
-    Constructor: (data_dir, fingerprint filename, mass spec file name)
-"""
 class MoNADataset(Dataset):
-    def __init__(self, data_dir = './data', fingerprint_type='ECFP', force=False):
+    """
+        normalize_peaks: bool
+            if True, normalizes intensities vector by using linear max-normalization, dividing all peak intensities by the max peak
+            
+        zero_theshold: bool
+            if normalize_peaks is True, all resultant normalized peaks with values below this threshold are set to 0, (aka treated as noise) 
+    
+    """
+    def __init__(self, data_dir = './data', fingerprint_type='ECFP', normalize_peaks=False, zero_threshold=1e-6, force=False):
         super(Dataset).__init__()
         
         
-        assert fingerprint_type in ['MACCS', 'ECFP'], 'Invalid Fingerprint Type';
+        assert fingerprint_type in ['MACCS', 'ECFP', 'SMILES'], 'Invalid Fingerprint Type';
         fps_name = f'fps_{fingerprint_type.lower()}'; ms_name=f'msms_{fingerprint_type.lower()}';
 
         if '.pkl' not in fps_name:
@@ -163,12 +173,11 @@ class MoNADataset(Dataset):
 
         """
         self.msms = [np.array(i) for i in self.msms]
-        """
-        self.msms = [i/np.max(i) for i in self.msms]
-        thr = 0.00
-        for i in range(len(self)):
-            self.msms[i][self.msms[i] < thr] = 0;
-        """ 
+        if normalize_peaks:
+            self.msms = [i/np.max(i) for i in self.msms]
+            thr = 0.00
+            for i in range(len(self)):
+                self.msms[i][self.msms[i] < zero_threshold] = 0;
         self.msms = [torch.Tensor(i) for i in self.msms]
 
         """

@@ -10,6 +10,7 @@ from torchvision.transforms import ToTensor
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import multiprocessing
+import sklearn.metrics
 
 from dataloader import MoNADataset
 
@@ -128,22 +129,31 @@ class BayesianNetwork(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y, *_ = batch
 
-        loss = self.sample_elbo(x, y)
-        
+        loss = self.sample_elbo(x, y) 
         y_hat = self.forward(x, sample=False)
         
         self.log("train_loss", loss)
         return loss
 
+    def get_metrics(self, batch, log_name):
+        x, y, *_ = batch
+        y_hat = self.forward(x, sample=False)
+
+        # Cosine similarity between (un)normalized peaks and model output 
+        self.log(f"{log_name}_cosine_sim", F.cosine_similarity(y_hat, y).mean(), prog_bar=True)
+
+        # Mean AUROC of top-1 peak vs all other peaks across molecules
+        self.log(f"{log_name}_mAUROC", np.mean([sklearn.metrics.roc_auc_score(F.one_hot(np.argmax(y[i]), self.output_size).reshape(-1,1), y_hat[i]) for i in range(len(y))]), prog_bar=True)
+        # Mean top-1 peak Rank across molecules
+        self.log(f"{log_name}_peak_rank", np.mean([float(i) for i in np.argmax(y_hat, axis=1)]), prog_bar=True)
+
     def validation_step(self, batch, batch_idx):
         x, y, *_ = batch
+
         loss = self.sample_elbo(x, y)
-        
-        y_hat = self.forward(x, sample=False)
-    
         self.log("val_loss", loss)
-        self.log("val_cosine_sim", F.cosine_similarity(y_hat, y).mean(), prog_bar=True, on_epoch=True)
-        #self.log("val_argmax", y_hat[np.argmax(y, axis=1)].mean(), prog_bar=True)
+
+        self.get_metrics(batch, 'val')        
 
         return loss
 
