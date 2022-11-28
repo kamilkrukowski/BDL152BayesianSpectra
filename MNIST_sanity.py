@@ -15,7 +15,7 @@ TRAIN_BATCH_SIZE = 1024
 TEST_BATCH_SIZE = 1024
 
 model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[28*28, 64],
-            INPUT_SIZE=28*28, OUTPUT_SIZE=10)
+            input_size=28*28, output_size=10)
 
 train_set = MNIST('data', download=True, train=True, transform=T.Compose([T.ToTensor(), T.Lambda(torch.flatten)]))
 test_set = MNIST('data', download=True, train=False, transform=T.Compose([T.ToTensor(), T.Lambda(torch.flatten)]))
