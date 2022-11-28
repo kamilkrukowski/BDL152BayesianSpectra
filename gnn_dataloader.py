@@ -6,7 +6,7 @@ from torch_geometric.utils import from_smiles as graph_from_smiles
 from tqdm.auto import tqdm
 
 
-from .dataloader import MoNADataset
+from dataloader import MoNADataset
 
 
 class GNNDataset(MoNADataset):
