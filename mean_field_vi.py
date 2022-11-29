@@ -100,11 +100,11 @@ class BayesianNetwork(pl.LightningModule):
 
 
     def forward(self, x, sample=False):
-        for layer_id, layer in enumerate(self.layers):
-           if layer_id < self.n_layers:
-              x = F.relu(layer(x, sample))
-           else:
-              x = F.log_softmax(layer(x, sample), dim=1)
+        for layer_id, layer in enumerate(self.layers, start=1):
+            if layer_id < self.n_layers:
+                x = F.relu(layer(x, sample))
+            elif layer_id == self.n_layers:
+                x = F.log_softmax(layer(x, sample), dim=1)
         return x
     
     def log_prior_and_posterior(self):
@@ -178,7 +178,7 @@ if __name__ == '__main__':
     test_loader = utils.data.DataLoader(test_set, num_workers=num_workers, batch_size=TEST_BATCH_SIZE) 
 
     METRIC = 'mAUROC/val'
-    TRIAL_DIR = 'logs/mfvi'
+    TRIAL_DIR = 'logs/mfvi1'
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         TRIAL_DIR, monitor=METRIC, mode='max', filename='best'
     )
@@ -190,7 +190,7 @@ if __name__ == '__main__':
     if os.path.exists(f"{TRIAL_DIR}/lightning_logs/version_0"):
         os.system(f"rm -r {TRIAL_DIR}/lightning_logs/version_0")
 
-    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[256], input_size=len(train_set[0][0]), output_size=1000, samples=8)
+    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[512,512,512], input_size=len(train_set[0][0]), output_size=1000, samples=8)
 
     trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True,
                             callbacks=callbacks, logger=logger)

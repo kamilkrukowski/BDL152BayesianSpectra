@@ -24,24 +24,12 @@ TEST_BATCH_SIZE=len(test_set)
 
 test_loader = utils.data.DataLoader(test_set, num_workers=num_workers, batch_size=TEST_BATCH_SIZE) 
 
-n_samples = 512
-for (x, y, *_) in test_loader:
-    y = y.detach().numpy()
-    
-    # Monte Carlo Posterior Predictive
-    posterior_pred = []
-    for i in range(n_samples):
-        y_hat = model.forward(x, sample=True).detach().numpy()
-        posterior_pred.append(y_hat)
-    posterior_pred = np.stack(posterior_pred, axis=2)
-    
-    # We only consider calibration on highest peak
-    posterior_pred = posterior_pred[np.argmax(y, axis=1)]
-    
-    for conf in [0.99]:
+def get_calibration(conf, posterior_pred, y):
         # First find confidence interval bounds
-        lower_bound = np.percentile(posterior_pred, (conf/2)*100, axis=2)
-        upper_bound = np.percentile(posterior_pred, (1-conf/2)*100, axis=2)
+        lower_bound = np.percentile(posterior_pred, (0.5-(conf/2.0))*100, axis=2)
+        upper_bound = np.percentile(posterior_pred, (0.5+(conf/2.0))*100, axis=2)
+
+        print(posterior_pred.shape)
         
         # Find confidence interval containment by logical AND on upper and lower bounds surrounding the true value
         lower_true = np.less_equal(lower_bound, y)
@@ -52,9 +40,27 @@ for (x, y, *_) in test_loader:
         
         calibration = np.mean(contained)
         print(f"contained in {conf:0.2f} is {np.sum(contained):0.2f}")
-        print(f"Calibration at {conf:0.2f} is {calibration:0.2f}")
-        
+        print(f"Calibration (interval) at {conf:0.2f} is {calibration:0.2f}")
+        return calibration
+    
 
-            
+n_samples = 16
+posterior_pred = None
+posterior_pred1 = None
+y = None
+for (x, y, *_) in test_loader:
+    indices = np.argmax(y, axis=1)
+    y = y.detach().numpy()[indices]
     
+    # Monte Carlo Posterior Predictive
+    posterior_pred1 = []
+    for i in range(n_samples):
+        y_hat = model.forward(x, sample=True).detach().numpy()
+        posterior_pred1.append(y_hat)
+    posterior_pred = np.stack(posterior_pred1, axis=2)
     
+    # We only consider calibration on highest peak
+    posterior_pred = posterior_pred[indices]
+    
+    for conf in [0.99]:
+        get_calibration(conf, posterior_pred, y)

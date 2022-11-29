@@ -130,7 +130,7 @@ class MoNADataset(Dataset):
             if normalize_peaks is True, all resultant normalized peaks with values below this threshold are set to 0, (aka treated as noise) 
     
     """
-    def __init__(self, data_dir = './data', fingerprint_type='ECFP', normalize_peaks=False, zero_threshold=1e-6, force=False):
+    def __init__(self, data_dir = './data', fingerprint_type='ECFP', normalize_peaks=True, zero_threshold=1e-6, force=False):
         super(Dataset).__init__()
         
         
@@ -209,7 +209,7 @@ class MoNADataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = MoNADataset(fingerprint_type='ECFP', force=True);
+    dataset = MoNADataset(fingerprint_type='ECFP', force=True, normalize_peaks=True);
 
     for x, y, *r in dataset:
         print(f"training data shape is {x.shape}")
