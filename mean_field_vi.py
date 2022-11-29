@@ -76,27 +76,29 @@ class BayesianLinear(nn.Module):
         return output
        
 class BayesianNetwork(pl.LightningModule):
-    def __init__(self, 
-                 lr,
-                 input_size, 
-                 output_size, 
-                 q_sigma=0.2,
-                 hidden_layer_sizes=[10],
-                 samples=2):
-      super().__init__()
-      self.lr = lr
-      self.samples = samples
-      self.output_size = output_size
-      self.input_size = input_size
+        def __init__(self, 
+                    lr,
+                    input_size, 
+                    output_size, 
+                    q_sigma=0.2,
+                    hidden_layer_sizes=[10],
+                    samples=2):
+        super().__init__()
+        self.lr = lr
+        self.samples = samples
+        self.OUTPUT_SIZE = output_size
+        self.INPUT_SIZE = input_size
 
-      nn_layer_sizes = ([input_size] + hidden_layer_sizes + [output_size])
-      self.n_layers = len(nn_layer_sizes) - 1
+        nn_layer_sizes = ([input_size] + hidden_layer_sizes + [output_size])
+        self.n_layers = len(nn_layer_sizes) - 1
 
-      # create neural network, layer by layer
-      self.layers = nn.ModuleList()
-      for n_in, n_out in zip(nn_layer_sizes[:-1], nn_layer_sizes[1:]):
-          layer = BayesianLinear(in_features=n_in, out_features=n_out, q_sigma=q_sigma)
-          self.layers.append(layer)
+        # create neural network, layer by layer
+        self.layers = nn.ModuleList()
+        for n_in, n_out in zip(nn_layer_sizes[:-1], nn_layer_sizes[1:]):
+            layer = BayesianLinear(in_features=n_in, out_features=n_out, q_sigma=q_sigma)
+            self.layers.append(layer)
+        self.layers.append(nn.Softmax(dim=1))
+
 
     def forward(self, x, sample=False):
         for layer_id, layer in enumerate(self.layers):
@@ -116,7 +118,7 @@ class BayesianNetwork(pl.LightningModule):
 
     def sample_elbo(self, input, target):
         samples = self.samples
-        outputs = torch.zeros(samples, len(input), self.output_size)
+        outputs = torch.zeros(samples, len(input), self.OUTPUT_SIZE)
         log_priors = torch.zeros(samples)
         log_variational_posteriors = torch.zeros(samples)
         for i in range(samples):
