@@ -177,15 +177,21 @@ if __name__ == '__main__':
     train_loader = utils.data.DataLoader(train_set, num_workers=num_workers, batch_size=TRAIN_BATCH_SIZE) 
     test_loader = utils.data.DataLoader(test_set, num_workers=num_workers, batch_size=TEST_BATCH_SIZE) 
 
-    metric = 'mAUROC/val'
+    METRIC = 'mAUROC/val'
+    TRIAL_DIR = 'logs/mfvi'
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        './lightning_logs', monitor=metric, mode='max'
+        TRIAL_DIR, monitor=METRIC, mode='max', filename='best'
     )
     callbacks=[checkpoint_callback, pl.callbacks.ModelSummary(max_depth=-1), 
-               pl.callbacks.EarlyStopping(monitor=metric, mode="max", patience=5, min_delta=0.001)]
+               pl.callbacks.EarlyStopping(monitor=METRIC, mode="max", patience=10, min_delta=0.001)]
+    logger = pl.loggers.TensorBoardLogger(TRIAL_DIR)
+    
+    # Remove previous Tensorboard statistics
+    if os.path.exists(f"{TRIAL_DIR}/lightning_logs/version_0"):
+        os.system(f"rm -r {TRIAL_DIR}/lightning_logs/version_0")
 
-    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]), output_size=1000, samples=16)
+    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[256], input_size=len(train_set[0][0]), output_size=1000, samples=8)
 
     trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True,
-                            callbacks=callbacks)
+                            callbacks=callbacks, logger=logger)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=test_loader)

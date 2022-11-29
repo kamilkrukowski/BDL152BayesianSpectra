@@ -119,7 +119,7 @@ if __name__ == '__main__':
         './lightning_logs', monitor=metric, mode='max'
     )
     callbacks=[checkpoint_callback, pl.callbacks.ModelSummary(max_depth=-1), 
-               pl.callbacks.EarlyStopping(monitor=metric, mode="max", patience=5, min_delta=0.001)]
+               pl.callbacks.EarlyStopping(monitor=metric, mode="max", patience=10, min_delta=0.001)]
 
     trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True, 
                          callbacks=callbacks)
