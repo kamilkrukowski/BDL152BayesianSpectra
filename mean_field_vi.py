@@ -136,17 +136,14 @@ class BayesianNetwork(pl.LightningModule):
         self.log("train_loss", loss)
         return loss
 
-    def get_metrics(self, batch, log_name):
-        x, y, *_ = batch
-        y_hat = self.forward(x, sample=False)
-
+    def get_metrics(self, y_hat, y, log_name):
         # Cosine similarity between (un)normalized peaks and model output 
-        self.log(f"{log_name}_cosine_sim", F.cosine_similarity(y_hat, y).mean(), prog_bar=True)
+        self.log(f"cosineSim/{log_name}", F.cosine_similarity(y_hat, y).mean(), prog_bar=True)
 
         # Mean AUROC of top-1 peak vs all other peaks across molecules
-        self.log(f"{log_name}_mAUROC", np.mean([sklearn.metrics.roc_auc_score(F.one_hot(np.argmax(y[i]), self.output_size).reshape(-1,1), y_hat[i]) for i in range(len(y))]), prog_bar=True)
+        self.log(f"mAUROC/{log_name}", np.mean([sklearn.metrics.roc_auc_score(F.one_hot(np.argmax(y[i]), self.OUTPUT_SIZE).reshape(-1,1), y_hat[i]) for i in range(len(y))]), prog_bar=True)
         # Mean top-1 peak Rank across molecules
-        self.log(f"{log_name}_peak_rank", np.argmax(y_hat.numpy(), axis=1).astype(float).mean(), prog_bar=True)
+        self.log(f"peakRank/{log_name}", np.mean([float(i) for i in np.argmax(y_hat, axis=1)]), prog_bar=True)
 
     def validation_step(self, batch, batch_idx):
         x, y, *_ = batch
@@ -181,7 +178,7 @@ if __name__ == '__main__':
     train_loader = utils.data.DataLoader(train_set, num_workers=num_workers, batch_size=TRAIN_BATCH_SIZE) 
     test_loader = utils.data.DataLoader(test_set, num_workers=num_workers, batch_size=TEST_BATCH_SIZE) 
 
-    metric = 'val_mAUROC'
+    metric = 'mAUROC/val'
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         './lightning_logs', monitor=metric, mode='max'
     )
