@@ -150,8 +150,10 @@ class BayesianNetwork(pl.LightningModule):
 
         loss = self.sample_elbo(x, y)
         self.log("loss/val", loss)
+        
+        y_hat = self.forward(x, sample=False)
 
-        self.get_metrics(batch, 'val')        
+        self.get_metrics(y_hat, y, 'val')        
 
         return loss
 
