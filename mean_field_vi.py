@@ -97,7 +97,6 @@ class BayesianNetwork(pl.LightningModule):
         for n_in, n_out in zip(nn_layer_sizes[:-1], nn_layer_sizes[1:]):
             layer = BayesianLinear(in_features=n_in, out_features=n_out, q_sigma=q_sigma)
             self.layers.append(layer)
-        self.layers.append(nn.Softmax(dim=1))
 
 
     def forward(self, x, sample=False):
