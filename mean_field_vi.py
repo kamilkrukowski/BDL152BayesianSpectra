@@ -76,13 +76,13 @@ class BayesianLinear(nn.Module):
         return output
        
 class BayesianNetwork(pl.LightningModule):
-        def __init__(self, 
-                    lr,
-                    input_size, 
-                    output_size, 
-                    q_sigma=0.2,
-                    hidden_layer_sizes=[10],
-                    samples=2):
+    def __init__(self, 
+                lr,
+                input_size, 
+                output_size, 
+                q_sigma=0.2,
+                hidden_layer_sizes=[10],
+                samples=2):
         super().__init__()
         self.lr = lr
         self.samples = samples
@@ -141,7 +141,6 @@ class BayesianNetwork(pl.LightningModule):
     def get_metrics(self, y_hat, y, log_name):
         # Cosine similarity between (un)normalized peaks and model output 
         self.log(f"cosineSim/{log_name}", F.cosine_similarity(y_hat, y).mean(), prog_bar=True)
-
         # Mean AUROC of top-1 peak vs all other peaks across molecules
         self.log(f"mAUROC/{log_name}", np.mean([sklearn.metrics.roc_auc_score(F.one_hot(np.argmax(y[i]), self.OUTPUT_SIZE).reshape(-1,1), y_hat[i]) for i in range(len(y))]), prog_bar=True)
         # Mean top-1 peak Rank across molecules
@@ -149,12 +148,11 @@ class BayesianNetwork(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y, *_ = batch
+        y_hat = self.forward(x, sample=False)
 
         loss = self.sample_elbo(x, y)
         self.log("loss/val", loss)
         
-        y_hat = self.forward(x, sample=False)
-
         self.get_metrics(y_hat, y, 'val')        
 
         return loss
