@@ -153,8 +153,6 @@ class BayesianNetwork(pl.LightningModule):
 
         self.get_metrics(batch, 'val')        
 
-        self.log('val_some_mu', self.layers[0].weight_mu[0][0], prog_bar=True)
-
         return loss
 
     def configure_optimizers(self):
