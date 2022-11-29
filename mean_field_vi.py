@@ -133,7 +133,7 @@ class BayesianNetwork(pl.LightningModule):
 
         loss = self.sample_elbo(x, y) 
         
-        self.log("train_loss", loss)
+        self.log("loss/train", loss)
         return loss
 
     def get_metrics(self, y_hat, y, log_name):
@@ -149,7 +149,7 @@ class BayesianNetwork(pl.LightningModule):
         x, y, *_ = batch
 
         loss = self.sample_elbo(x, y)
-        self.log("val_loss", loss)
+        self.log("loss/val", loss)
 
         self.get_metrics(batch, 'val')        
 
@@ -183,7 +183,7 @@ if __name__ == '__main__':
     callbacks=[checkpoint_callback, pl.callbacks.ModelSummary(max_depth=-1), 
                pl.callbacks.EarlyStopping(monitor=metric, mode="max", patience=5, min_delta=0.001)]
 
-    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[1024], input_size=len(train_set[0][0]), output_size=1000, samples=8)
+    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]), output_size=1000, samples=16)
 
     trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True,
                             callbacks=callbacks)

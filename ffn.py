@@ -70,14 +70,14 @@ class FFN(pl.LightningModule):
         y_hat = self.forward(x)
         loss = self.get_loss(y_hat, y)
         
-        self.log("train_loss", loss)
+        self.log("loss/train", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y, *_ = batch
         y_hat = self.forward(x)
         loss = self.get_loss(y_hat, y)
-        self.log("val_loss", loss)
+        self.log("loss/val", loss)
         
         self.get_metrics(y_hat, y, 'val')
 
@@ -87,7 +87,7 @@ class FFN(pl.LightningModule):
         x, y, *_ = batch
         y_hat = self.forward(x)
         loss = self.get_loss(y_hat, y)
-        self.log("test_loss", loss)
+        self.log("loss/test", loss)
         
         self.get_metrics(y_hat, y, 'test')
         
@@ -121,5 +121,6 @@ if __name__ == '__main__':
     callbacks=[checkpoint_callback, pl.callbacks.ModelSummary(max_depth=-1), 
                pl.callbacks.EarlyStopping(monitor=metric, mode="max", patience=5, min_delta=0.001)]
 
-    trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True, callbacks=callbacks)
+    trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True, 
+                         callbacks=callbacks)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=test_loader)
