@@ -52,8 +52,8 @@ class FFN(pl.LightningModule):
         return self.ffn(x)
 
     def get_loss(self, y_hat, y, mask=None):
-        #loss = 1 - F.cosine_similarity(y_hat, y, axis=1)
-        loss = F.cross_entropy(y_hat, np.argmax(y, axis=1)).mean()
+        loss = 1 - F.cosine_similarity(y_hat, y, axis=1)
+        #loss = F.cross_entropy(y_hat, np.argmax(y, axis=1)).mean()
         return loss.mean();
     
     def get_metrics(self, y_hat, y, log_name):

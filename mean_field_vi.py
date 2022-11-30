@@ -45,11 +45,13 @@ class BayesianLinear(nn.Module):
         # Weight parameters
         self.weight_mu = nn.Parameter(torch.Tensor(out_features, in_features).uniform_(-0.2, 0.2))
         self.weight_rho = nn.Parameter(torch.randn((out_features, in_features)))
+        #self.weight_rho = torch.Tensor(0.01*torch.ones((out_features, in_features)))
         self.weight = Gaussian(self.weight_mu, self.weight_rho)
 
         # Bias parameters
         self.bias_mu = nn.Parameter(torch.Tensor(out_features).uniform_(-0.2, 0.2))
         self.bias_rho = nn.Parameter(torch.randn((out_features)))
+        #self.bias_rho = torch.Tensor(0.01*torch.ones((out_features)))
         self.bias = Gaussian(self.bias_mu, self.bias_rho)
 
         # Prior distribution
@@ -141,9 +143,9 @@ class BayesianNetwork(pl.LightningModule):
         # Cosine similarity between (un)normalized peaks and model output 
         self.log(f"cosineSim/{log_name}", F.cosine_similarity(y_hat, y).mean(), prog_bar=True)
         # Mean AUROC of top-1 peak vs all other peaks across molecules
-        self.log(f"mAUROC/{log_name}", np.mean([sklearn.metrics.roc_auc_score(F.one_hot(np.argmax(y[i]), self.OUTPUT_SIZE).reshape(-1,1), y_hat[i]) for i in range(len(y))]), prog_bar=True)
+        self.log(f"mAUROC/{log_name}", np.mean([sklearn.metrics.roc_auc_score(F.one_hot(np.argmax(y[i]), self.OUTPUT_SIZE), y_hat[i]) for i in range(len(y))]), prog_bar=True)
         # Mean top-1 peak Rank across molecules
-        self.log(f"peakRank/{log_name}", np.mean([float(i) for i in np.argmax(y_hat, axis=1)]), prog_bar=True)
+        self.log(f"peakRank/{log_name}", np.mean([np.argsort(y_hat[i].detach().numpy())[np.argmax(y[i])] for i in range(len(y))]), prog_bar=True)
 
     def validation_step(self, batch, batch_idx):
         x, y, *_ = batch
@@ -178,7 +180,7 @@ if __name__ == '__main__':
     test_loader = utils.data.DataLoader(test_set, num_workers=num_workers, batch_size=TEST_BATCH_SIZE) 
 
     METRIC = 'mAUROC/val'
-    TRIAL_DIR = 'logs/mfvi1'
+    TRIAL_DIR = 'logs/mfvi2'
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
         TRIAL_DIR, monitor=METRIC, mode='max', filename='best'
     )
@@ -189,8 +191,10 @@ if __name__ == '__main__':
     # Remove previous Tensorboard statistics
     if os.path.exists(f"{TRIAL_DIR}/lightning_logs/version_0"):
         os.system(f"rm -r {TRIAL_DIR}/lightning_logs/version_0")
+        os.system(f"rm -r {TRIAL_DIR}/best.ckpt")
 
-    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[512,512,512], input_size=len(train_set[0][0]), output_size=1000, samples=8)
+    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]),
+                            output_size=1000, samples=1, q_sigma=10.0)
 
     trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True,
                             callbacks=callbacks, logger=logger)
