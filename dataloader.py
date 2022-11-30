@@ -216,9 +216,11 @@ class MoNADataset(Dataset):
             mask_name = f"{mask_name}.pkl"
 
         self.fps, self.msms = None, None
-        if force or not os.path.exists(os.path.join(data_dir, fps_name)) or not os.path.exists(os.path.join(data_dir, ms_name)):
-
-            print("Generating Fingerprints...")
+        if force or not os.path.exists(os.path.join(cache_dir, fps_name)) or not os.path.exists(os.path.join(cache_dir, ms_name)):
+            
+            if force:
+                print("Force ", end='')
+            print(f"Generating {fingerprint_type} Fingerprints...")
                 
             if not os.path.exists(cache_dir):
                 os.system(f'mkdir -p {cache_dir}')
@@ -244,6 +246,12 @@ class MoNADataset(Dataset):
             
         self.masks = None 
         if force or not os.path.exists(os.path.join(cache_dir, mask_name)):
+            if force:
+                print("Force ", end='')
+            if bayesian_mask:
+                print("Generating Bayesian Loss Weighing Masks")
+            else:
+                print("Generating Loss Weighing Masks")
             self.masks = preprocess_mask(msms=self.msms, sparse_weight=sparse_weight,
                                          bayesian_mask=bayesian_mask, filename=os.path.join(cache_dir, mask_name))
         else:
