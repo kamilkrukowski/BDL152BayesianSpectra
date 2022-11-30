@@ -63,10 +63,10 @@ def generate_fingerprint(smiles, type='ECFP'):
 
     return fingerprint.ToList()
 
-def preprocess_data(data_dir, type='ECFP'):
+def preprocess_data(data_dir, type='ECFP', normalize_peaks=False, zero_threshold=0):
     
     data = None
-    with open(os.path.join(data_dir, 'MoNA-export-LC-MS-MS_Spectra.json')) as f:
+    with open(os.path.join(data_dir, '..', 'MoNA-export-LC-MS-MS_Spectra.json')) as f:
         data = json.load(f)
 
     print("Total number of spectra: ", len(data))
@@ -111,8 +111,23 @@ def preprocess_data(data_dir, type='ECFP'):
     print("Number of msms and fps processed: ", len(all_fps))
     print("Number of failed instances: ", len(failed_fps))
     error_msgs = error_msgs.getvalue();
+        
+    all_msms = [np.array(i) for i in all_msms]
+    
+    """
+        Normalization of Mass Spectra
+        1. The largest peak is treated as intensity '1.0', all other rescaled.
+        2. All peaks with magnitude < 0.01 are masked as 0.
 
-    all_fps = np.array(all_fps)
+    """
+    if normalize_peaks:
+        all_msms = [i/np.max(i) for i in all_msms]
+        if zero_threshold > 0:
+            for i in range(len(all_msms)):
+                all_msms[i][all_msms[i] < zero_threshold] = 0;
+    all_msms = [torch.Tensor(i) for i in all_msms]
+
+    all_fps = [torch.Tensor(i) for i in np.array(all_fps)]
     with open(os.path.join(data_dir, f"msms_{type.lower()}.pkl"), 'wb') as f:
         pkl.dump(all_msms, f)
     with open(os.path.join(data_dir, f"fps_{type.lower()}.pkl"), 'wb') as f:
@@ -120,19 +135,70 @@ def preprocess_data(data_dir, type='ECFP'):
     with open(os.path.join(data_dir, f"errors_{type.lower()}.pkl"), 'wb') as f:
         pkl.dump(error_msgs, f)
 
+    return all_fps, all_msms
+
+        
+def preprocess_mask(msms, sparse_weight, filename, bayesian_mask=False):
+    """
+        Add sparse/nonsparse weights
+    """
+    zero_weight = sparse_weight
+    nonzero_weight = 1 - sparse_weight
+    
+    masks = []
+    for i in range(len(msms)):
+        nonzero_mask = msms[i] != 0
+        zero_mask = ~nonzero_mask
+
+
+        nonzero_uniform_weight = nonzero_weight/nonzero_mask.sum();
+        zero_uniform_weight = zero_weight/zero_mask.sum();
+
+        """
+        We choose a sigma yielding a log_prob data likelihood of nonzero_uniform_weight * (y_hat - y)^2 up to constant
+        nonzero_uniform_weight = 1 / (2*((mask*tau) ** 2))
+        We will use tau as absolute scale on the log_likelihood term, for now it is 1.
+        nonzero_uniform_weight = 1 / (2*((mask) ** 2))
+        mask = \sqrt{1/(2*nonzero_uniform_weight)}
+        """
+        if bayesian_mask:
+            nonzero_uniform_bayesian_sigma = np.sqrt(1.0/(2*nonzero_uniform_weight))
+            nonzero_mask = nonzero_uniform_bayesian_sigma*nonzero_mask
+            
+            zero_uniform_bayesian_sigma = np.sqrt(1.0/(2*zero_uniform_weight))
+            zero_mask = zero_uniform_bayesian_sigma*zero_mask
+        else:
+            nonzero_mask = nonzero_uniform_weight*nonzero_mask
+            zero_mask = zero_uniform_weight*zero_mask
+            
+        
+        mask = zero_mask + nonzero_mask
+        masks.append(mask)
+    
+    with open(filename, 'wb') as f:
+        pkl.dump(masks, f)
+    
+    return masks
+
 
 class MoNADataset(Dataset):
     """
-        normalize_peaks: bool
-            if True, normalizes intensities vector by using linear max-normalization, dividing all peak intensities by the max peak
-            
-        zero_theshold: bool
-            if normalize_peaks is True, all resultant normalized peaks with values below this threshold are set to 0, (aka treated as noise) 
-    
+    normalize_peaks: bool
+        if True, normalizes intensities vector by using linear max-normalization, dividing all peak intensities by the max peak
+        
+    zero_threshold: bool
+        if normalize_peaks is True, all resultant normalized peaks with values below this threshold are set to 0, (aka treated as noise) 
+
+    sparse_weight: float
+        in range [0,1.0], represents percentage of probability mass assigned to 0-entries for regression.
     """
-    def __init__(self, data_dir = './data', fingerprint_type='ECFP', normalize_peaks=True, zero_threshold=1e-6, force=False):
+    def __init__(self, data_dir = './data', fingerprint_type='ECFP', normalize_peaks=True, zero_threshold=0,
+                 bayesian_mask=False, sparse_weight=0.5, force=False):
         super(Dataset).__init__()
         
+        self.data_dir = data_dir
+        cache_dir = os.path.join(data_dir, 'mona_cache')
+        self.cache_dir = cache_dir
         
         assert fingerprint_type in ['MACCS', 'ECFP', 'SMILES'], 'Invalid Fingerprint Type';
         fps_name = f'fps_{fingerprint_type.lower()}'; ms_name=f'msms_{fingerprint_type.lower()}';
@@ -141,62 +207,49 @@ class MoNADataset(Dataset):
             fps_name = fps_name + '.pkl'
         if '.pkl' not in ms_name:
             ms_name = ms_name + '.pkl'
+        
+        mask_name = f"{fingerprint_type.lower()}_sparse={sparse_weight:.2f}_normalized={int(normalize_peaks)}_mask"
 
+        if bayesian_mask:
+            mask_name = f"{mask_name}_bayesian.pkl"
+        else:
+            mask_name = f"{mask_name}.pkl"
+
+        self.fps, self.msms = None, None
         if force or not os.path.exists(os.path.join(data_dir, fps_name)) or not os.path.exists(os.path.join(data_dir, ms_name)):
 
             print("Generating Fingerprints...")
+                
+            if not os.path.exists(cache_dir):
+                os.system(f'mkdir -p {cache_dir}')
+            
             if not os.path.exists(os.path.join(data_dir, 'MoNA-export-LC-MS-MS_Spectra.json')):
                 print("Downloading dataset...")
-                if not os.path.exists(data_dir):
-                    os.system(f'mkdir -p {data_dir}')
                 os.system(f"wget https://mona.fiehnlab.ucdavis.edu/rest/downloads/retrieve/9c822c48-67f4-4600-8b81-ef7491008245")
                 os.system(f"unzip 9c822c48-67f4-4600-8b81-ef7491008245")
                 os.system(f"mv MoNA-export-LC-MS-MS_Spectra.json {data_dir}")
                 os.system(f"rm 9c822c48-67f4-4600-8b81-ef7491008245")
 
-            preprocess_data(data_dir, type=fingerprint_type)
+            self.fps, self.msms = preprocess_data(cache_dir, type=fingerprint_type,
+                                                  normalize_peaks=normalize_peaks, zero_threshold=zero_threshold)
 
-
-        self.fps = None
-        with open(os.path.join(data_dir, fps_name), 'rb') as f:
-            self.fps = pkl.load(f)
-        self.fps = [torch.Tensor(i) for i in self.fps]
-        
-        self._len = len(self.fps)
-        
-        self.msms = None
-        with open(os.path.join(data_dir, ms_name), 'rb') as f:
-            self.msms = pkl.load(f)
-        
-        """
-            Normalization of Mass Spectra
-            1. The largest peak is treated as intensity '1.0', all other rescaled.
-            2. All peaks with magnitude < 0.01 are masked as 0.
-
-        """
-        self.msms = [np.array(i) for i in self.msms]
-        if normalize_peaks:
-            self.msms = [i/np.max(i) for i in self.msms]
-            thr = 0.00
-            for i in range(len(self)):
-                self.msms[i][self.msms[i] < zero_threshold] = 0;
-        self.msms = [torch.Tensor(i) for i in self.msms]
-
-        """
-            Add sparse/nonsparse weights
-        """
-        nonzero_weight = 0.9 ; zero_weight = 0.1;
-
-        self.masks = []
-        for i in range(len(self)):
-            nonzero_mask = self.msms[i] != 0
-            zero_mask = ~nonzero_mask
-
-            nonzero_mask = nonzero_mask / (nonzero_weight * nonzero_mask.sum());
-            zero_mask = zero_mask / (zero_weight * zero_mask.sum());
+        else:
             
-            mask = zero_mask + nonzero_mask
-            self.masks.append(mask)
+            with open(os.path.join(cache_dir, fps_name), 'rb') as f:
+                self.fps = pkl.load(f)
+            with open(os.path.join(cache_dir, ms_name), 'rb') as f:
+                self.msms = pkl.load(f) 
+
+        self._len = len(self.fps)
+            
+        self.masks = None 
+        if force or not os.path.exists(os.path.join(cache_dir, mask_name)):
+            self.masks = preprocess_mask(msms=self.msms, sparse_weight=sparse_weight,
+                                         bayesian_mask=bayesian_mask, filename=os.path.join(cache_dir, mask_name))
+        else:
+            with open(os.path.join(cache_dir, mask_name), 'rb') as f:
+                self.masks = pkl.load(f)
+            
 
     def __len__(self):
         return self._len
@@ -209,7 +262,9 @@ class MoNADataset(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = MoNADataset(fingerprint_type='ECFP', force=True, normalize_peaks=True);
+    dataset = MoNADataset(fingerprint_type='MACCS',
+                          sparse_weight=0.9,
+                          force=True);
 
     for x, y, *r in dataset:
         print(f"training data shape is {x.shape}")
