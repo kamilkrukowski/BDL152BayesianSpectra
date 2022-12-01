@@ -29,7 +29,8 @@ class FFN(pl.LightningModule):
         if len(hidden_layer_sizes) > 0:
             hidden_layers.append(nn.Linear(self.INPUT_SIZE, hidden_layer_sizes[0]))
             hidden_layers.append(nn.BatchNorm1d(hidden_layer_sizes[0]))
-            hidden_layers.append(nn.Dropout(0.1))
+            hidden_layers.append(nn.Dropout(0.5))
+            hidden_layers.append(nn.ReLU())
         else:
             hidden_layers.append(nn.Linear(self.INPUT_SIZE, self.OUTPUT_SIZE))
 
@@ -38,11 +39,12 @@ class FFN(pl.LightningModule):
             hidden_layers.append(nn.Linear(hidden_layer_sizes[idx-1], hidden_layer_sizes[idx]))
             hidden_layers.append(nn.BatchNorm1d(hidden_layer_sizes[idx]))
             hidden_layers.append(nn.Dropout(0.5))
+            hidden_layers.append(nn.ReLU())
             
         hidden_layers.append(nn.Linear(hidden_layer_sizes[-1], self.OUTPUT_SIZE))
 
         # Final activation
-        hidden_layers.append(nn.Softmax(dim=1))
+        # hidden_layers.append(nn.Softmax(dim=1))
         
         
         self.ffn = nn.Sequential(*hidden_layers)
@@ -52,9 +54,10 @@ class FFN(pl.LightningModule):
         return self.ffn(x)
 
     def get_loss(self, y_hat, y, mask=None):
-        loss = 1 - F.cosine_similarity(y_hat, y, axis=1)
+        #loss = 1 - F.cosine_similarity(y_hat, y, axis=1).mean()
         #loss = F.cross_entropy(y_hat, np.argmax(y, axis=1)).mean()
-        return loss.mean();
+        loss = (F.mse_loss(y_hat, y, reduction='none')*mask).sum()
+        return loss
     
     def get_metrics(self, y_hat, y, log_name):
         # Cosine similarity between (un)normalized peaks and model output 
@@ -66,17 +69,17 @@ class FFN(pl.LightningModule):
         self.log(f"peakRank/{log_name}", np.mean([float(i) for i in np.argmax(y_hat, axis=1)]), prog_bar=True)
 
     def training_step(self, batch, batch_idx):
-        x, y, *mask = batch
+        x, y, mask = batch
         y_hat = self.forward(x)
-        loss = self.get_loss(y_hat, y)
+        loss = self.get_loss(y_hat, y, mask=mask)
         
         self.log("loss/train", loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y, *_ = batch
+        x, y, mask = batch
         y_hat = self.forward(x)
-        loss = self.get_loss(y_hat, y)
+        loss = self.get_loss(y_hat, y, mask=mask)
         self.log("loss/val", loss)
         
         self.get_metrics(y_hat, y, 'val')
@@ -103,7 +106,7 @@ if __name__ == '__main__':
     TEST_BATCH_SIZE = 1024
     EPOCHS = 50
 
-    dataset = MoNADataset(fingerprint_type='ECFP')
+    dataset = MoNADataset(fingerprint_type='MACCS', bayesian_mask=True, sparse_weight=0.1)
     train_set, test_set, extra = utils.data.random_split(dataset, [0.8, 0.2, 0], generator=Generator().manual_seed(2022))
     
     print(f"INPUT_SIZE: {len(train_set[0][0])}")
@@ -114,12 +117,19 @@ if __name__ == '__main__':
 
     model = FFN(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]), output_size=1000)
     
-    metric = 'mAUROC/val'
+    METRIC = 'peakRank/val'
+    TRIAL_DIR = 'logs/ffn1'
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        './lightning_logs', monitor=metric, mode='max'
+        TRIAL_DIR, monitor=METRIC, mode='max', filename='best'
     )
     callbacks=[checkpoint_callback, pl.callbacks.ModelSummary(max_depth=-1), 
-               pl.callbacks.EarlyStopping(monitor=metric, mode="max", patience=10, min_delta=0.001)]
+               pl.callbacks.EarlyStopping(monitor=METRIC, mode="max", patience=10, min_delta=0.001)]
+    logger = pl.loggers.TensorBoardLogger(TRIAL_DIR)
+    
+    # Remove previous Tensorboard statistics
+    if os.path.exists(f"{TRIAL_DIR}/lightning_logs/version_0"):
+        os.system(f"rm -r {TRIAL_DIR}/lightning_logs/version_0")
+        os.system(f"rm -r {TRIAL_DIR}/best.ckpt")
 
     trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True, 
                          callbacks=callbacks)
