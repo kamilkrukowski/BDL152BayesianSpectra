@@ -61,26 +61,31 @@ class FFN(pl.LightningModule):
     
     def get_metrics(self, y_hat, y, log_name):
         # Cosine similarity between (un)normalized peaks and model output 
-        self.log(f"cosineSim/{log_name}", F.cosine_similarity(y_hat, y).mean(), prog_bar=True)
-
+        self.log(f"cosineSim/{log_name}",
+                 F.cosine_similarity(y_hat, y).mean(),
+                 prog_bar=True, on_epoch=True)
         # Mean AUROC of top-1 peak vs all other peaks across molecules
-        self.log(f"mAUROC/{log_name}", np.mean([sklearn.metrics.roc_auc_score(F.one_hot(np.argmax(y[i]), self.OUTPUT_SIZE).reshape(-1,1), y_hat[i]) for i in range(len(y))]), prog_bar=True)
+        self.log(f"mAUROC/{log_name}",
+                 np.mean([sklearn.metrics.roc_auc_score(F.one_hot(np.argmax(y[i]), self.OUTPUT_SIZE).reshape(-1,1), y_hat[i]) for i in range(len(y))]),
+                 prog_bar=True, on_epoch=True)
         # Mean top-1 peak Rank across molecules
-        self.log(f"peakRank/{log_name}", np.mean([float(i) for i in np.argmax(y_hat, axis=1)]), prog_bar=True)
+        self.log(f"peakRank/{log_name}",
+                 np.mean([float(i) for i in np.argmax(y_hat, axis=1)]),
+                 prog_bar=True, on_epoch=True)
 
     def training_step(self, batch, batch_idx):
         x, y, mask = batch
         y_hat = self.forward(x)
         loss = self.get_loss(y_hat, y, mask=mask)
         
-        self.log("loss/train", loss)
+        self.log("loss/train", loss, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y, mask = batch
         y_hat = self.forward(x)
         loss = self.get_loss(y_hat, y, mask=mask)
-        self.log("loss/val", loss)
+        self.log("loss/val", loss, on_epoch=True)
         
         self.get_metrics(y_hat, y, 'val')
 
@@ -106,7 +111,7 @@ if __name__ == '__main__':
     TEST_BATCH_SIZE = 1024
     EPOCHS = 50
 
-    dataset = MoNADataset(fingerprint_type='MACCS', bayesian_mask=True, sparse_weight=0.1)
+    dataset = MoNADataset(fingerprint_type='MACCS', bayesian_mask=True, sparse_weight=0.1, normalize_peaks=False)
     train_set, test_set, extra = utils.data.random_split(dataset, [0.8, 0.2, 0], generator=Generator().manual_seed(2022))
     
     print(f"INPUT_SIZE: {len(train_set[0][0])}")
@@ -124,7 +129,7 @@ if __name__ == '__main__':
         TRIAL_DIR, monitor=METRIC, mode=MODE, filename='best'
     )
     callbacks=[checkpoint_callback, pl.callbacks.ModelSummary(max_depth=-1), 
-               pl.callbacks.EarlyStopping(monitor=METRIC, mode=MODE, patience=5, min_delta=0.001)]
+               pl.callbacks.EarlyStopping(monitor=METRIC, mode=MODE, patience=12, min_delta=0.001)]
     logger = pl.loggers.TensorBoardLogger(TRIAL_DIR)
     
     # Remove previous Tensorboard statistics

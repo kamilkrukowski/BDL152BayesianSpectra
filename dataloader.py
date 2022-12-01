@@ -192,7 +192,7 @@ class MoNADataset(Dataset):
     sparse_weight: float
         in range [0,1.0], represents percentage of probability mass assigned to 0-entries for regression.
     """
-    def __init__(self, data_dir = './data', fingerprint_type='ECFP', normalize_peaks=True, zero_threshold=0,
+    def __init__(self, data_dir = './data', fingerprint_type='ECFP', normalize_peaks=False, zero_threshold=0,
                  bayesian_mask=False, sparse_weight=0.5, force=False):
         super(Dataset).__init__()
         
