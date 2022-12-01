@@ -118,19 +118,20 @@ if __name__ == '__main__':
     model = FFN(lr=1e-3, hidden_layer_sizes=[4096], input_size=len(train_set[0][0]), output_size=1000)
     
     METRIC = 'peakRank/val'
-    TRIAL_DIR = 'logs/ffn1'
+    MODE = 'min'
+    TRIAL_DIR = 'logs/ffn2'
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        TRIAL_DIR, monitor=METRIC, mode='max', filename='best'
+        TRIAL_DIR, monitor=METRIC, mode=MODE, filename='best'
     )
     callbacks=[checkpoint_callback, pl.callbacks.ModelSummary(max_depth=-1), 
-               pl.callbacks.EarlyStopping(monitor=METRIC, mode="max", patience=10, min_delta=0.001)]
+               pl.callbacks.EarlyStopping(monitor=METRIC, mode=MODE, patience=5, min_delta=0.001)]
     logger = pl.loggers.TensorBoardLogger(TRIAL_DIR)
     
     # Remove previous Tensorboard statistics
-    if os.path.exists(f"{TRIAL_DIR}/lightning_logs/version_0"):
-        os.system(f"rm -r {TRIAL_DIR}/lightning_logs/version_0")
-        os.system(f"rm -r {TRIAL_DIR}/best.ckpt")
+    if os.path.exists(TRIAL_DIR):
+        os.system(f"rm -r {TRIAL_DIR}")
+    os.system(f'mk -p {TRIAL_DIR}')
 
     trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True, 
-                         callbacks=callbacks)
+                         callbacks=callbacks, logger=logger)
     trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=test_loader)
