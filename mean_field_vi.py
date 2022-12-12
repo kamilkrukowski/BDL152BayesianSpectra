@@ -205,7 +205,7 @@ class BayesianNetwork(pl.LightningModule):
                  prog_bar=prog_bar, on_epoch=True)
         # Mean top-1 peak Rank across molecules
         self.log(f"peakRank/{log_name}",
-                 np.mean([float(i) for i in np.argmax(y_hat, axis=1)]),
+                 np.mean([float(1000 - y_hat[i].argsort().argsort()[np.argmax(y[i])]) for i in range(len(y_hat))]),
                  prog_bar=prog_bar, on_epoch=True)
 
     def validation_step(self, batch, batch_idx):
