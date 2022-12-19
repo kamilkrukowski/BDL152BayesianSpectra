@@ -236,7 +236,8 @@ if __name__ == '__main__':
     
     print(f"INPUT_SIZE: {len(train_set[0][0])}")
 
-    num_workers = multiprocessing.cpu_count()
+    #num_workers = multiprocessing.cpu_count()
+    num_workers = 2;
     train_loader = utils.data.DataLoader(train_set, num_workers=num_workers, batch_size=TRAIN_BATCH_SIZE) 
     test_loader = utils.data.DataLoader(test_set, num_workers=num_workers, batch_size=TEST_BATCH_SIZE) 
 
@@ -255,8 +256,8 @@ if __name__ == '__main__':
         os.system(f"rm -r {TRIAL_DIR}")
     os.system(f'mk -p {TRIAL_DIR}')
 
-    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[512], input_size=len(train_set[0][0]),
-                            output_size=1000, samples=2, q_sigma=10.0, tau=0.01, fixed_sigma=0.1)
+    model = BayesianNetwork(lr=1e-3, hidden_layer_sizes=[1024], input_size=len(train_set[0][0]),
+                            output_size=1000, samples=2, q_sigma=10.0, tau=0.01, fixed_sigma=1.0)
 
     trainer = pl.Trainer(max_epochs=EPOCHS, auto_select_gpus = True, auto_scale_batch_size=True,
                             callbacks=callbacks, logger=logger)
